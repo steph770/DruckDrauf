@@ -1,9 +1,10 @@
-# Grübeluhr
+# Druck Drauf!
 
 Zugzeit-Uhr für Brettspielabende. Läuft im Browser und lässt sich am Android-Handy als App installieren (Chrome-Menü - "Zum Startbildschirm hinzufügen").
 
 ## Funktionen
 
+- Spielname vor jeder Partie (zuletzt gespielte Spiele als Schnellauswahl)
 - Beliebig viele Spieler, jeweils mit Name und Farbe (Palette oder eigene Farbe)
 - Reihenfolge per Pfeilen oder Würfel festlegen
 - Riesiger Tipp-Button in Spielerfarbe: Tippen = nächster Spieler
@@ -11,6 +12,7 @@ Zugzeit-Uhr für Brettspielabende. Läuft im Browser und lässt sich am Android-
 - Pause, kleiner Zurück-Button mit Sicherheitsabfrage, Rundenzähler
 - Ton und Vibration beim Zugwechsel (Doppelton bei neuer Runde)
 - Statistik am Ende: Gesamtzeit, Züge, Durchschnitt, längster Zug, Titel
+- Partien-Log mit Langzeit-Statistik nach Spieler, Spiel und Verlauf, Backup als Datei
 - Spieler bleiben gespeichert, laufende Partie übersteht Neuladen
 - Bildschirm bleibt während der Partie an, funktioniert offline
 

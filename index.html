@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#14161a">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Grübeluhr</title>
+<title>Druck Drauf!</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -35,6 +35,30 @@
   .brand { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; }
   .brand img { width: 44px; height: 44px; border-radius: 12px; }
   .brand h1 { margin: 0; font-size: 28px; letter-spacing: -0.5px; }
+  .brand .grow { flex: 1; min-width: 0; }
+  .brand .tb { flex: none; }
+  .gname { width: 100%; height: 54px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--text); padding: 0 16px; font-size: 19px; font-weight: 700; }
+  .gname:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  .recent { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .rchip { height: 34px; padding: 0 12px; border-radius: 17px; background: var(--panel); color: var(--muted); font-size: 14px; }
+  .rchip:active, .rchip.on { background: var(--panel2); color: var(--text); }
+  .hhead { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .hhead h1 { margin: 0; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--panel); padding: 4px; border-radius: 14px; margin-bottom: 14px; }
+  .tab { height: 40px; border-radius: 10px; color: var(--muted); font-weight: 700; font-size: 15px; }
+  .tab.on { background: var(--panel2); color: var(--text); }
+  .empty { color: var(--muted); text-align: center; padding: 36px 12px; line-height: 1.5; }
+  .big2 { font-size: 20px; font-weight: 800; white-space: nowrap; }
+  .pchips { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: 14px; }
+  .pchips span { display: inline-flex; align-items: center; gap: 6px; }
+  .pchips i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+  .pchips b { font-weight: 600; color: var(--muted); }
+  .del { margin-left: auto; color: var(--muted); width: 32px; height: 32px; border-radius: 8px; font-size: 16px; }
+  .file-btn { display: grid; place-items: center; cursor: pointer; }
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: var(--panel2); padding: 12px 18px; border-radius: 12px; z-index: 20; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+  .saved { color: var(--muted); font-size: 14px; margin: 0; }
   .brand p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
   .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 22px 4px 10px; }
   .plist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
@@ -84,7 +108,8 @@
     border: 1px solid var(--line); border-radius: 10px; }
   .tb.small:disabled { opacity: .25; }
   .info { flex: 1; text-align: center; line-height: 1.15; }
-  .info .r { font-weight: 800; font-size: 17px; }
+  .info { min-width: 0; }
+  .info .r { font-weight: 800; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .info .g { color: var(--muted); font-size: 13px; }
   .big { flex: 1; min-height: 0; width: 100%; border-radius: 28px; background: var(--c); color: var(--ink);
     display: flex; flex-direction: column; overflow: hidden; position: relative;
@@ -168,10 +193,13 @@ const PALETTE = [
   ['Türkis', '#00acc1'], ['Blau', '#1e88e5'], ['Lila', '#8e24aa'], ['Pink', '#ec407a'],
   ['Braun', '#8d6e63'], ['Grau', '#90a4ae'], ['Schwarz', '#2b2b2b'], ['Weiß', '#f2f2f2'],
 ];
-const KEY = 'gruebeluhr.v1';
+const KEY = 'druckdrauf.v1';
+const HKEY = 'druckdrauf.history.v1';
 const TAP_LOCK_MS = 700;
+const MIN_LOG_MS = 30000;   // kürzere Partien (Fehlstarts) werden nicht geloggt
 
 let S = load() || defaultState();
+let H = loadHistory();      // Partien-Log, neueste zuerst
 let openColor = -1;       // which player's palette is open in setup
 let lastTap = 0;
 let tickTimer = null;
@@ -189,6 +217,23 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.players ? s : null; } catch (e) { return null; }
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function loadHistory() {
+  try { const h = JSON.parse(localStorage.getItem(HKEY)); return Array.isArray(h) ? h : []; } catch (e) { return []; }
+}
+function saveHistory() {
+  H.sort((a, b) => b.date - a.date);
+  try { localStorage.setItem(HKEY, JSON.stringify(H)); } catch (e) {}
+}
+function titles() {
+  const seen = new Set(), out = [];
+  for (const h of H) { const k = h.title.trim().toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(h.title); } }
+  return out;
+}
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+function fmtDate(ts) { return new Date(ts).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 /* ---------- Helpers ---------- */
@@ -250,10 +295,13 @@ function turnMs(t) { return t.ms + (t.at ? Date.now() - t.at : 0); }
 function playerTotal(i) { return S.game.turns.reduce((a, t) => a + (t.p === i ? turnMs(t) : 0), 0); }
 function gameTotal() { return S.game.turns.reduce((a, t) => a + turnMs(t), 0); }
 
-function startGame() {
+function startGame(title) {
+  title = (title || '').trim();
+  if (!title) { $('#gname') && $('#gname').focus(); return; }
   const now = Date.now();
   const players = S.players.map((p, i) => ({ ...p, name: p.name.trim() || 'Spieler ' + (i + 1) }));
-  S.game = { players, turns: [{ p: 0, ms: 0, at: now, round: 1 }], paused: false };
+  S.game = { id: uid() + now.toString(36), title, startedAt: now, players, turns: [{ p: 0, ms: 0, at: now, round: 1 }], paused: false };
+  S.gameName = '';
   S.phase = 'game';
   lastTap = now;
   save(); render();
@@ -293,7 +341,23 @@ function endGame() {
   if (c.at) { c.ms += Date.now() - c.at; c.at = null; }
   S.game.paused = true;
   S.phase = 'end';
+  logGame();
   save(); render();
+}
+function logGame() {
+  const g = S.game, duration = gameTotal();
+  const k = H.findIndex((h) => h.id === g.id);
+  if (duration < MIN_LOG_MS) { if (k >= 0) { H.splice(k, 1); saveHistory(); } g.logged = false; return; }
+  const rec = {
+    id: g.id, title: g.title, date: g.startedAt, duration, rounds: cur().round, turns: g.turns.length,
+    players: g.players.map((p, i) => {
+      const ts = g.turns.filter((t) => t.p === i).map(turnMs);
+      return { name: p.name, color: p.color, total: ts.reduce((a, b) => a + b, 0), turns: ts.length, longest: ts.length ? Math.max(...ts) : 0 };
+    }),
+  };
+  if (k >= 0) H[k] = rec; else H.push(rec);
+  g.logged = true;
+  saveHistory();
 }
 function continueGame() {
   S.phase = 'game';
@@ -317,7 +381,7 @@ function render() {
   clearInterval(tickTimer);
   document.body.style.overflow = S.phase === 'game' ? 'hidden' : '';
   if (S.phase === 'game') { renderGame(); setWake(true); tickTimer = setInterval(() => updateGame(false), 250); }
-  else { setWake(false); S.phase === 'end' ? renderStats() : renderSetup(); }
+  else { setWake(false); S.phase === 'end' ? renderStats() : S.phase === 'history' ? renderHistory() : renderSetup(); }
   window.scrollTo(0, 0);
 }
 
@@ -328,8 +392,13 @@ function renderSetup() {
   <main class="setup">
     <div class="brand">
       <img src="icon-192.png" alt="">
-      <div><h1>Grübeluhr</h1><p>Wer überlegt am längsten?</p></div>
+      <div class="grow"><h1>Druck Drauf!</h1><p>Wer überlegt am längsten?</p></div>
+      <button class="tb" data-act="history">📊 Statistik</button>
     </div>
+    <div class="label">Spiel</div>
+    <input class="gname" id="gname" value="${esc(S.gameName || '')}" placeholder="Was wird gespielt?" maxlength="40" autocomplete="off" enterkeyhint="done">
+    ${titles().length ? `<div class="recent">${titles().slice(0, 8).map((t) =>
+      `<button class="rchip ${t.toLowerCase() === (S.gameName || '').trim().toLowerCase() ? 'on' : ''}" data-act="title" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}
     <div class="label">Spieler · Reihenfolge = Zugreihenfolge</div>
     <ol class="plist">
       ${S.players.map((p, i) => `
@@ -358,8 +427,8 @@ function renderSetup() {
       <label class="toggle">Ton beim Zugwechsel <input type="checkbox" class="switch" data-set="sound" ${S.settings.sound ? 'checked' : ''}></label>
       <label class="toggle">Vibration <input type="checkbox" class="switch" data-set="vibrate" ${S.settings.vibrate ? 'checked' : ''}></label>
     </div>
-    <button class="start" data-act="start">Partie starten</button>
-    <p class="hint">Spieler und Farben bleiben für den nächsten Abend gespeichert.</p>
+    <button class="start" data-act="start" id="startBtn" ${(S.gameName || '').trim() ? '' : 'disabled'}>Partie starten</button>
+    <p class="hint" id="startHint">${(S.gameName || '').trim() ? 'Spieler und Farben bleiben für den nächsten Abend gespeichert.' : 'Zuerst oben das Spiel eintragen.'}</p>
   </main>`;
 }
 
@@ -400,7 +469,7 @@ function updateGame(structural) {
     big.style.setProperty('--ink', ink(p.color));
     $('#nm1').textContent = p.name;
     $('#nm2').textContent = p.name;
-    $('#round').textContent = 'Runde ' + c.round;
+    $('#round').textContent = g.title + ' · Runde ' + c.round;
     $('#undoBtn').disabled = g.turns.length < 2;
     big.classList.remove('flash'); void big.offsetWidth; big.classList.add('flash');
     const nextP = (c.p + 1) % n;
@@ -430,7 +499,8 @@ function renderStats() {
 
   $('#app').innerHTML = `
   <main class="stats">
-    <h1>Partie vorbei</h1>
+    <h1>${esc(g.title)}</h1>
+    <p class="saved">${g.logged ? '✓ Partie gespeichert, fließt in die Langzeit-Statistik ein' : 'Unter 30 Sekunden - wird nicht gespeichert'}</p>
     <div class="kpis">
       <div class="kpi"><b class="num">${fmt(gameTotal())}</b><span>Spielzeit</span></div>
       <div class="kpi"><b class="num">${cur().round}</b><span>Runden</span></div>
@@ -447,10 +517,117 @@ function renderStats() {
     </ol>
     <div class="btns">
       <button class="btn primary" data-act="rematch">Revanche · gleiche Spieler</button>
-      <button class="btn" data-act="toSetup">Spieler ändern</button>
+      <button class="btn" data-act="toSetup">Neue Partie / Spieler ändern</button>
+      <button class="btn" data-act="history">📊 Langzeit-Statistik</button>
       <button class="btn ghost" data-act="continue">Doch weiterspielen</button>
     </div>
   </main>`;
+}
+
+/* ---------- Langzeit-Statistik ---------- */
+function aggPlayers() {
+  const m = {};
+  for (const g of H) {   // H ist neueste zuerst: Name/Farbe der jüngsten Partie gewinnt
+    const maxT = Math.max(...g.players.map((p) => p.total));
+    for (const p of g.players) {
+      const k = p.name.trim().toLowerCase();
+      const a = m[k] || (m[k] = { name: p.name, color: p.color, games: 0, total: 0, turns: 0, longest: 0, kings: 0 });
+      a.games++; a.total += p.total; a.turns += p.turns; a.longest = Math.max(a.longest, p.longest);
+      if (g.players.length > 1 && maxT > 0 && p.total === maxT) a.kings++;
+    }
+  }
+  return Object.values(m).map((a) => ({ ...a, avg: a.turns ? a.total / a.turns : 0 })).sort((a, b) => b.avg - a.avg);
+}
+function aggGames() {
+  const m = {};
+  for (const g of H) {
+    const k = g.title.trim().toLowerCase();
+    const a = m[k] || (m[k] = { title: g.title, plays: 0, duration: 0, rounds: 0, last: 0, pl: {} });
+    a.plays++; a.duration += g.duration; a.rounds += g.rounds; a.last = Math.max(a.last, g.date);
+    for (const p of g.players) {
+      const pk = p.name.trim().toLowerCase();
+      const x = a.pl[pk] || (a.pl[pk] = { name: p.name, total: 0, turns: 0 });
+      x.total += p.total; x.turns += p.turns;
+    }
+  }
+  return Object.values(m).map((a) => {
+    const slow = Object.values(a.pl).filter((x) => x.turns).map((x) => ({ ...x, avg: x.total / x.turns })).sort((x, y) => y.avg - x.avg)[0];
+    return { ...a, avgDur: a.duration / a.plays, avgRounds: a.rounds / a.plays, slow };
+  }).sort((a, b) => b.plays - a.plays || b.last - a.last);
+}
+
+function renderHistory() {
+  const tab = S.histTab || 'players';
+  let body;
+  if (!H.length) {
+    body = `<div class="empty">Noch keine Partien gespeichert.<br>Jede beendete Partie landet automatisch hier.</div>`;
+  } else if (tab === 'players') {
+    const rows = aggPlayers(), max = Math.max(1, ...rows.map((r) => r.avg));
+    body = `<p class="saved" style="margin:0 4px 10px">Sortiert nach Ø Bedenkzeit pro Zug</p><ol class="rank">${rows.map((r) => `
+      <li class="rk" style="--c:${r.color}">
+        <div class="rhead"><span class="dot"></span><span class="n">${esc(r.name)}</span><span class="num">Ø ${fmt(r.avg)}</span></div>
+        <div class="bar"><i style="width:${(r.avg / max) * 100}%"></i></div>
+        <div class="sub num">${r.games} ${r.games === 1 ? 'Partie' : 'Partien'} · ${fmt(r.total)} gesamt · ${r.turns} ${r.turns === 1 ? 'Zug' : 'Züge'} · längster Zug ${fmt(r.longest)}</div>
+        ${r.kings ? `<div class="badges"><span class="badge">👑 ${r.kings}× Grübelkönig</span></div>` : ''}
+      </li>`).join('')}</ol>`;
+  } else if (tab === 'games') {
+    body = `<ol class="rank">${aggGames().map((a) => `
+      <li class="rk">
+        <div class="rhead"><span class="n">${esc(a.title)}</span><span class="num">${a.plays}×</span></div>
+        <div class="sub num" style="margin-top:6px">Ø Dauer ${fmt(a.avgDur)} · Ø ${a.avgRounds.toFixed(1).replace('.', ',')} Runden · zuletzt ${fmtDate(a.last)}</div>
+        ${a.slow ? `<div class="badges"><span class="badge">🐢 Grübelt hier am meisten: ${esc(a.slow.name)} (Ø ${fmt(a.slow.avg)})</span></div>` : ''}
+      </li>`).join('')}</ol>`;
+  } else {
+    body = `<ol class="rank">${H.map((g) => `
+      <li class="rk">
+        <div class="rhead"><span class="n">${esc(g.title)}</span><button class="del" data-act="delLog" data-id="${g.id}" aria-label="Partie löschen">✕</button></div>
+        <div class="sub num">${fmtDate(g.date)} · ${fmt(g.duration)} · ${g.rounds} ${g.rounds === 1 ? 'Runde' : 'Runden'}</div>
+        <div class="pchips num">${[...g.players].sort((a, b) => b.total - a.total).map((p) =>
+          `<span style="--c:${p.color}"><i></i>${esc(p.name)} <b>${fmt(p.total)}</b></span>`).join('')}</div>
+      </li>`).join('')}</ol>`;
+  }
+  $('#app').innerHTML = `
+  <main class="stats">
+    <div class="hhead"><button class="tb" data-act="back" aria-label="Zurück">←</button><h1>Statistik</h1></div>
+    <div class="tabs">
+      <button class="tab ${tab === 'players' ? 'on' : ''}" data-act="tab" data-t="players">Spieler</button>
+      <button class="tab ${tab === 'games' ? 'on' : ''}" data-act="tab" data-t="games">Spiele</button>
+      <button class="tab ${tab === 'log' ? 'on' : ''}" data-act="tab" data-t="log">Verlauf</button>
+    </div>
+    ${body}
+    <div class="label">Datensicherung</div>
+    <div class="row">
+      <button class="btn" data-act="export" ${H.length ? '' : 'disabled'}>Backup speichern</button>
+      <label class="btn file-btn">Backup laden<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+    </div>
+    <p class="hint">Das Log liegt nur auf diesem Gerät. Ein Backup schützt vor Datenverlust (z. B. beim Löschen der Browserdaten).</p>
+  </main>`;
+}
+
+function exportHistory() {
+  const data = JSON.stringify({ app: 'druck-drauf', version: 1, exported: Date.now(), history: H }, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+  a.download = `druck-drauf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function importHistory(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result), list = Array.isArray(d) ? d : d.history;
+      if (!Array.isArray(list)) throw new Error();
+      let added = 0;
+      for (const g of list) {
+        if (!g || !g.id || !g.title || !Array.isArray(g.players)) continue;
+        if (!H.some((h) => h.id === g.id)) { H.push(g); added++; }
+      }
+      saveHistory(); renderHistory();
+      toast(added ? `${added} Partien importiert` : 'Keine neuen Partien gefunden');
+    } catch (e) { toast('Datei konnte nicht gelesen werden'); }
+  };
+  r.readAsText(file);
 }
 
 /* ---------- Events ---------- */
@@ -476,7 +653,21 @@ document.addEventListener('click', (e) => {
     case 'shuffle':
       for (let k = P.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [P[k], P[j]] = [P[j], P[k]]; }
       openColor = -1; save(); renderSetup(); break;
-    case 'start': startGame(); break;
+    case 'start': startGame(S.gameName); break;
+    case 'title': S.gameName = el.dataset.t; save(); renderSetup(); break;
+    case 'history': S.prevPhase = S.phase; S.phase = 'history'; save(); render(); break;
+    case 'back': S.phase = S.prevPhase === 'end' && S.game ? 'end' : 'setup'; save(); render(); break;
+    case 'tab': S.histTab = el.dataset.t; save(); renderHistory(); break;
+    case 'export': exportHistory(); break;
+    case 'delLog': {
+      const g = H.find((h) => h.id === el.dataset.id);
+      if (g) ask('Partie löschen?', `${g.title} vom ${fmtDate(g.date)} wird aus der Statistik entfernt.`, 'Löschen', () => {
+        H = H.filter((h) => h.id !== g.id); saveHistory();
+        if (S.game && S.game.id === g.id) S.game.logged = false;
+        renderHistory();
+      });
+      break;
+    }
     // Game
     case 'next': nextTurn(); break;
     case 'pause': togglePause(); break;
@@ -489,18 +680,27 @@ document.addEventListener('click', (e) => {
     }
     case 'end': ask('Partie beenden?', 'Die Uhr stoppt und die Statistik wird angezeigt. Du kannst danach noch weiterspielen.', 'Beenden', endGame); break;
     // Stats
-    case 'rematch': startGame(); break;
+    case 'rematch': startGame(S.game.title); break;
     case 'toSetup': S.phase = 'setup'; S.game = null; save(); render(); break;
     case 'continue': continueGame(); break;
   }
 });
 document.addEventListener('input', (e) => {
   if (e.target.classList.contains('pname')) { S.players[+e.target.dataset.i].name = e.target.value; save(); }
+  if (e.target.id === 'gname') {
+    S.gameName = e.target.value; save();
+    const ok = !!S.gameName.trim();
+    $('#startBtn').disabled = !ok;
+    $('#startHint').textContent = ok ? 'Spieler und Farben bleiben für den nächsten Abend gespeichert.' : 'Zuerst oben das Spiel eintragen.';
+    document.querySelectorAll('.rchip').forEach((c) => c.classList.toggle('on', c.dataset.t.toLowerCase() === S.gameName.trim().toLowerCase()));
+  }
 });
+document.addEventListener('keydown', (e) => { if (e.target.id === 'gname' && e.key === 'Enter') e.target.blur(); });
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.type === 'color') { S.players[+t.dataset.i].color = t.value.toLowerCase(); openColor = -1; save(); renderSetup(); }
   if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; save(); }
+  if (t.id === 'importFile' && t.files[0]) importHistory(t.files[0]);
 });
 
 render();

@@ -1,6 +1,6 @@
 {
-  "name": "Grübeluhr",
-  "short_name": "Grübeluhr",
+  "name": "Druck Drauf!",
+  "short_name": "Druck Drauf!",
   "description": "Zugzeit-Uhr für Brettspielabende",
   "start_url": "./",
   "scope": "./",
