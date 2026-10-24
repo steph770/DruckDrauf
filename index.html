@@ -233,6 +233,97 @@ function toast(msg) {
   const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
   document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
 }
+/* ---------- Cloud-Sync (Firebase, siehe cloud.js) ---------- */
+let cloudState = 'loading';   // loading | nocfg | error | ready | syncing | synced | offline
+function validRec(g) { return g && g.id && typeof g.title === 'string' && Array.isArray(g.players); }
+function newGroupCode() {
+  const abc = 'abcdefghjkmnpqrstuvwxyz23456789', a = new Uint32Array(20);
+  crypto.getRandomValues(a);
+  return Array.from(a, (x) => abc[x % abc.length]).join('');
+}
+function parseGroupCode(s) {
+  const m = String(s || '').match(/gruppe=([a-z0-9-]+)/i);
+  const c = (m ? m[1] : String(s || '')).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return c.length >= 16 ? c : null;
+}
+function fmtCode(c) { return c.match(/.{1,4}/g).join('-'); }
+function inviteLink() { return location.origin + location.pathname + '#gruppe=' + S.group; }
+function cloudErr() { cloudState = 'error'; refreshCloud(); }
+function queue(kind, id) {
+  const k = kind === 'up' ? 'pendingUp' : 'pendingDel';
+  S[k] = (S[k] || []).filter((x) => x !== id).concat(id); save();
+}
+function cloudPut(rec) {
+  if (!S.group) return;
+  if (window.Cloud) window.Cloud.put(S.group, rec).catch(cloudErr); else queue('up', rec.id);
+}
+function cloudDel(id) {
+  if (!S.group) return;
+  if (window.Cloud) window.Cloud.del(S.group, id).catch(cloudErr); else queue('del', id);
+}
+function connectGroup() {
+  const g = S.group;
+  // Was offline/ohne Verbindung angefallen ist, jetzt hochladen
+  for (const id of S.pendingUp || []) { const r = H.find((h) => h.id === id); if (r) window.Cloud.put(g, r).catch(cloudErr); }
+  for (const id of S.pendingDel || []) window.Cloud.del(g, id).catch(cloudErr);
+  S.pendingUp = []; S.pendingDel = []; save();
+  cloudState = 'syncing'; refreshCloud();
+  window.Cloud.watch(g, (list, meta) => {
+    if (S.group !== g) return;
+    // Noch nicht hochgeladene Partien behalten, noch nicht übertragene Löschungen beachten
+    const up = new Set(S.pendingUp || []), del = new Set(S.pendingDel || []);
+    const remote = list.filter((r) => validRec(r) && !del.has(r.id));
+    const ids = new Set(remote.map((r) => r.id));
+    H = remote.concat(H.filter((h) => up.has(h.id) && !ids.has(h.id))); saveHistory();
+    cloudState = meta.hasPendingWrites ? 'syncing' : meta.fromCache ? 'offline' : 'synced';
+    refreshCloud(true);
+  }, cloudErr);
+}
+window.cloudReady = () => { cloudState = 'ready'; if (S.group) connectGroup(); else refreshCloud(); };
+window.cloudFailed = (e) => { cloudState = e ? 'error' : 'nocfg'; refreshCloud(); };
+
+function joinGroup(code) {
+  if (window.Cloud) window.Cloud.stop();
+  S.group = code;
+  // Bisherige Partien dieses Geräts in die Gruppe mitnehmen
+  S.pendingUp = H.map((h) => h.id); S.pendingDel = [];
+  save();
+  if (window.Cloud) connectGroup(); else refreshCloud();
+  toast('Gruppe beigetreten');
+}
+function leaveGroup() {
+  if (window.Cloud) window.Cloud.stop();
+  S.group = null; S.pendingUp = []; S.pendingDel = [];
+  cloudState = window.Cloud ? 'ready' : cloudState;
+  save(); refreshCloud();
+}
+async function shareInvite() {
+  const url = inviteLink();
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Druck Drauf!', text: 'Tritt unserer Spielrunde bei:', url }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(url); toast('Einladungslink kopiert'); }
+  catch (e) { ask('Einladungslink', url, 'OK', () => {}); }
+}
+function cloudStatusText() {
+  if (cloudState === 'nocfg') return 'Cloud-Speicher noch nicht eingerichtet - Partien liegen nur auf diesem Gerät.';
+  if (!S.group) return 'Partien liegen nur auf diesem Gerät. Mit einer Gruppe sehen alle Geräte dieselbe History.';
+  return {
+    loading: '⏳ Verbinde …',
+    ready: '⏳ Verbinde …',
+    syncing: '⏳ Synchronisiere …',
+    synced: '☁ Synchronisiert mit der Gruppe',
+    offline: '📴 Offline - Änderungen werden hochgeladen, sobald wieder Netz da ist',
+    error: '⚠ Keine Verbindung zum Cloud-Speicher - Partien werden später hochgeladen',
+  }[cloudState] || '';
+}
+function refreshCloud(dataChanged) {
+  if (S.phase === 'history') {
+    if (dataChanged || !$('#cloudStatus')) renderHistory();
+    else { $('#cloudStatus').textContent = cloudStatusText(); }
+  }
+}
+
 function fmtDate(ts) { return new Date(ts).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -347,7 +438,7 @@ function endGame() {
 function logGame() {
   const g = S.game, duration = gameTotal();
   const k = H.findIndex((h) => h.id === g.id);
-  if (duration < MIN_LOG_MS) { if (k >= 0) { H.splice(k, 1); saveHistory(); } g.logged = false; return; }
+  if (duration < MIN_LOG_MS) { if (k >= 0) { H.splice(k, 1); saveHistory(); cloudDel(g.id); } g.logged = false; return; }
   const rec = {
     id: g.id, title: g.title, date: g.startedAt, duration, rounds: cur().round, turns: g.turns.length,
     players: g.players.map((p, i) => {
@@ -358,6 +449,7 @@ function logGame() {
   if (k >= 0) H[k] = rec; else H.push(rec);
   g.logged = true;
   saveHistory();
+  cloudPut(rec);
 }
 function continueGame() {
   S.phase = 'game';
@@ -500,7 +592,7 @@ function renderStats() {
   $('#app').innerHTML = `
   <main class="stats">
     <h1>${esc(g.title)}</h1>
-    <p class="saved">${g.logged ? '✓ Partie gespeichert, fließt in die Langzeit-Statistik ein' : 'Unter 30 Sekunden - wird nicht gespeichert'}</p>
+    <p class="saved">${g.logged ? `✓ Partie gespeichert${S.group ? ' und mit der Gruppe geteilt' : ''}` : 'Unter 30 Sekunden - wird nicht gespeichert'}</p>
     <div class="kpis">
       <div class="kpi"><b class="num">${fmt(gameTotal())}</b><span>Spielzeit</span></div>
       <div class="kpi"><b class="num">${cur().round}</b><span>Runden</span></div>
@@ -595,12 +687,27 @@ function renderHistory() {
       <button class="tab ${tab === 'log' ? 'on' : ''}" data-act="tab" data-t="log">Verlauf</button>
     </div>
     ${body}
+    <div class="label">Gemeinsame History</div>
+    <div class="rk">
+      <p class="saved" id="cloudStatus">${esc(cloudStatusText())}</p>
+      ${cloudState === 'nocfg' ? '' : S.group ? `
+        <div class="sub num" style="margin-top:10px">Gruppe ${fmtCode(S.group)}</div>
+        <div class="row">
+          <button class="btn primary" data-act="invite" style="height:48px;font-size:16px">Mitspieler einladen</button>
+          <button class="btn ghost" data-act="leave" style="flex:none;padding:0 16px">Verlassen</button>
+        </div>` : `
+        <div class="row"><button class="btn primary" data-act="newGroup" style="height:48px;font-size:16px">Neue Gruppe erstellen</button></div>
+        <div class="row">
+          <input class="pname" id="joinCode" placeholder="Einladungslink oder Code" autocomplete="off">
+          <button class="btn" data-act="join" style="flex:none;padding:0 16px">Beitreten</button>
+        </div>`}
+    </div>
     <div class="label">Datensicherung</div>
     <div class="row">
       <button class="btn" data-act="export" ${H.length ? '' : 'disabled'}>Backup speichern</button>
       <label class="btn file-btn">Backup laden<input type="file" id="importFile" accept=".json,application/json" hidden></label>
     </div>
-    <p class="hint">Das Log liegt nur auf diesem Gerät. Ein Backup schützt vor Datenverlust (z. B. beim Löschen der Browserdaten).</p>
+    <p class="hint">Ein Backup ist eine Datei mit allen Partien - zum Aufheben oder für ein anderes Gerät.</p>
   </main>`;
 }
 
@@ -621,7 +728,7 @@ function importHistory(file) {
       let added = 0;
       for (const g of list) {
         if (!g || !g.id || !g.title || !Array.isArray(g.players)) continue;
-        if (!H.some((h) => h.id === g.id)) { H.push(g); added++; }
+        if (!H.some((h) => h.id === g.id)) { H.push(g); cloudPut(g); added++; }
       }
       saveHistory(); renderHistory();
       toast(added ? `${added} Partien importiert` : 'Keine neuen Partien gefunden');
@@ -659,10 +766,19 @@ document.addEventListener('click', (e) => {
     case 'back': S.phase = S.prevPhase === 'end' && S.game ? 'end' : 'setup'; save(); render(); break;
     case 'tab': S.histTab = el.dataset.t; save(); renderHistory(); break;
     case 'export': exportHistory(); break;
+    case 'newGroup': joinGroup(newGroupCode()); break;
+    case 'join': {
+      const code = parseGroupCode($('#joinCode').value);
+      if (!code) { toast('Ungültiger Link oder Code'); break; }
+      joinGroup(code);
+      break;
+    }
+    case 'invite': shareInvite(); break;
+    case 'leave': ask('Gruppe verlassen?', 'Dieses Gerät synchronisiert dann nicht mehr. Die bisherigen Partien bleiben hier als lokale Kopie, für die anderen ändert sich nichts.', 'Verlassen', leaveGroup); break;
     case 'delLog': {
       const g = H.find((h) => h.id === el.dataset.id);
-      if (g) ask('Partie löschen?', `${g.title} vom ${fmtDate(g.date)} wird aus der Statistik entfernt.`, 'Löschen', () => {
-        H = H.filter((h) => h.id !== g.id); saveHistory();
+      if (g) ask('Partie löschen?', `${g.title} vom ${fmtDate(g.date)} wird aus der Statistik entfernt${S.group ? ' - auf allen Geräten der Gruppe' : ''}.`, 'Löschen', () => {
+        H = H.filter((h) => h.id !== g.id); saveHistory(); cloudDel(g.id);
         if (S.game && S.game.id === g.id) S.game.logged = false;
         renderHistory();
       });
@@ -705,9 +821,26 @@ document.addEventListener('change', (e) => {
 
 render();
 
+// Einladungslink (…#gruppe=code) beim Öffnen auswerten
+function handleInvite() {
+  const code = parseGroupCode(location.hash);
+  if (!code) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (S.group === code) { toast('Schon in dieser Gruppe'); return; }
+  const go = () => {
+    joinGroup(code);
+    if (S.phase === 'setup') { S.prevPhase = 'setup'; S.phase = 'history'; save(); render(); }
+  };
+  if (S.group) ask('Gruppe wechseln?', 'Dieses Gerät ist schon in einer anderen Gruppe. Zur neuen Gruppe wechseln?', 'Wechseln', go);
+  else go();
+}
+handleInvite();
+window.addEventListener('hashchange', handleInvite);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 </script>
+<script type="module" src="cloud.js"></script>
 </body>
 </html>

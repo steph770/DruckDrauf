@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Zugriff nur, wer den geheimen Gruppencode kennt (Einladungslink).
+    // Die Liste aller Gruppen ist nicht abrufbar, Codes lassen sich also nicht erraten.
+    match /groups/{group}/games/{game} {
+      allow read, delete: if group.size() >= 16;
+      allow create, update: if group.size() >= 16
+        && request.resource.data.id == game
+        && request.resource.data.title is string
+        && request.resource.data.players is list
+        && request.resource.data.players.size() <= 30;
+    }
+  }
+}

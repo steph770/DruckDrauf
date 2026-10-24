@@ -13,7 +13,14 @@ Zugzeit-Uhr für Brettspielabende. Läuft im Browser und lässt sich am Android-
 - Ton und Vibration beim Zugwechsel (Doppelton bei neuer Runde)
 - Statistik am Ende: Gesamtzeit, Züge, Durchschnitt, längster Zug, Titel
 - Partien-Log mit Langzeit-Statistik nach Spieler, Spiel und Verlauf, Backup als Datei
+- Gemeinsame History über mehrere Geräte (Firebase Firestore), Beitritt per Einladungslink, einzelne Partien für alle löschbar
 - Spieler bleiben gespeichert, laufende Partie übersteht Neuladen
 - Bildschirm bleibt während der Partie an, funktioniert offline
 
-Alle Daten bleiben lokal im Browser (localStorage).
+Ohne Gruppe bleiben alle Daten lokal im Browser. Mit Gruppe liegen die Partien zusätzlich in Firestore unter `groups/{gruppencode}/games/{id}`; Zugriff hat nur, wer den geheimen Gruppencode aus dem Einladungslink kennt (siehe `firestore.rules`).
+
+## Firebase einrichten
+
+1. Firebase-Projekt anlegen, Firestore-Datenbank erstellen (Standort Europa)
+2. Inhalt von `firestore.rules` als Regeln veröffentlichen
+3. Web-App registrieren und die Konfiguration in `config.js` eintragen
