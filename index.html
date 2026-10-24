@@ -117,7 +117,8 @@
   .big:active { filter: brightness(.94); }
   .half { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px; min-height: 0; }
   .half.flip { transform: rotate(180deg); }
-  .nm { font-size: clamp(26px, 9vw, 64px); font-weight: 800; letter-spacing: -0.5px; max-width: 100%;
+  .turn { font-size: clamp(16px, 4.5vw, 26px); font-weight: 600; opacity: .7; }
+  .nm { font-size: clamp(44px, 15vw, 120px); line-height: 1.05; font-weight: 800; letter-spacing: -0.5px; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tm { font-size: clamp(56px, 21vw, 170px); font-weight: 800; line-height: .95; letter-spacing: -2px; }
   .tot { font-size: clamp(13px, 3.6vw, 18px); opacity: .75; font-weight: 600; }
@@ -534,9 +535,9 @@ function renderGame() {
       <button class="tb" data-act="end">Ende</button>
     </div>
     <button class="big" id="big" data-act="next">
-      <div class="half flip"><div class="nm" id="nm1"></div><div class="tm num" id="tm1"></div></div>
+      <div class="half flip"><div class="nm" id="nm1"></div><div class="turn">ist dran</div></div>
       <div class="divider">Tippen = nächster Zug</div>
-      <div class="half"><div class="nm" id="nm2"></div><div class="tm num" id="tm2"></div><div class="tot num" id="tot"></div></div>
+      <div class="half"><div class="nm" id="nm2"></div><div class="turn">ist dran</div></div>
     </button>
     <div class="strip" id="strip"></div>
     <div class="pauseov hidden" id="pauseov" data-act="pause">
@@ -550,28 +551,24 @@ function renderGame() {
 function updateGame(structural) {
   if (S.phase !== 'game') return;
   const g = S.game, c = cur(), p = g.players[c.p], n = g.players.length;
-  const t = fmt(turnMs(c));
-  $('#tm1').textContent = t;
-  $('#tm2').textContent = t;
-  $('#gtime').textContent = 'Spielzeit ' + fmt(gameTotal());
-  $('#tot').textContent = 'gesamt ' + fmt(playerTotal(c.p));
+  // Bewusst keine laufende Zeit sichtbar - gemessen wird nur im Hintergrund
   if (structural) {
     const big = $('#big');
     big.style.setProperty('--c', p.color);
     big.style.setProperty('--ink', ink(p.color));
     $('#nm1').textContent = p.name;
     $('#nm2').textContent = p.name;
-    $('#round').textContent = g.title + ' · Runde ' + c.round;
+    $('#round').textContent = g.title;
+    $('#gtime').textContent = 'Runde ' + c.round;
     $('#undoBtn').disabled = g.turns.length < 2;
     big.classList.remove('flash'); void big.offsetWidth; big.classList.add('flash');
     const nextP = (c.p + 1) % n;
     $('#strip').innerHTML = g.players.map((pl, i) =>
       `<div class="chip ${i === c.p ? 'now' : ''} ${i === nextP && n > 1 ? 'next' : ''}" style="--c:${pl.color}">
-        <span class="dot"></span><span class="n">${esc(pl.name)}</span><span class="t num" data-pt="${i}"></span></div>`).join('');
+        <span class="dot"></span><span class="n">${esc(pl.name)}</span></div>`).join('');
     const nowChip = $('#strip .chip.now');
     if (nowChip) nowChip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }
-  document.querySelectorAll('[data-pt]').forEach((el) => { el.textContent = fmt(playerTotal(+el.dataset.pt)); });
   $('#pauseov').classList.toggle('hidden', !g.paused);
 }
 
