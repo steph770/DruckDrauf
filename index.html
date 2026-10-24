@@ -100,8 +100,8 @@
 
   /* ---------- Game ---------- */
   .game { position: fixed; inset: 0; display: flex; flex-direction: column;
-    padding: env(safe-area-inset-top) 10px calc(10px + env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none; }
-  .topbar { display: flex; align-items: center; gap: 8px; height: 56px; flex: none; }
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); user-select: none; -webkit-user-select: none; }
+  .topbar { display: flex; align-items: center; gap: 8px; height: 56px; flex: none; padding: 0 10px; }
   .tb { height: 42px; min-width: 42px; padding: 0 14px; border-radius: 12px; background: var(--panel); font-weight: 700; font-size: 15px; }
   .tb:active { background: var(--panel2); }
   .tb.small { min-width: 34px; height: 34px; padding: 0; font-size: 18px; color: var(--muted); background: transparent;
@@ -111,10 +111,12 @@
   .info { min-width: 0; }
   .info .r { font-weight: 800; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .info .g { color: var(--muted); font-size: 13px; }
-  .big { flex: 1; min-height: 0; width: 100%; border-radius: 28px; background: var(--c); color: var(--ink);
+  /* Randlose Farbfläche: jede Berührung zählt (touch-action: none verhindert, dass Android sie als Wischen wertet) */
+  .big { flex: 1; min-height: 0; width: 100%; border-radius: 0; background: var(--c); color: var(--ink);
     display: flex; flex-direction: column; overflow: hidden; position: relative;
-    box-shadow: 0 0 0 4px rgba(255,255,255,.06), 0 12px 40px -10px var(--c); transition: background .25s, box-shadow .25s; }
-  .big:active { filter: brightness(.94); }
+    touch-action: none; -webkit-touch-callout: none; transition: background .25s; }
+  .big * { pointer-events: none; }
+  .big.pressed { filter: brightness(.9); }
   .half { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px; min-height: 0; }
   .half.flip { transform: rotate(180deg); }
   .turn { font-size: clamp(16px, 4.5vw, 26px); font-weight: 600; opacity: .7; }
@@ -125,8 +127,8 @@
   .divider { flex: none; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; opacity: .55;
     border-top: 2px dashed currentColor; border-bottom: 2px dashed currentColor; padding: 5px 0; margin: 0 18%; }
   .big.flash { animation: flash .35s ease-out; }
-  @keyframes flash { from { transform: scale(.97); } to { transform: scale(1); } }
-  .strip { flex: none; display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 2px; scrollbar-width: none; }
+  @keyframes flash { from { filter: brightness(1.25); } to { filter: brightness(1); } }
+  .strip { flex: none; display: flex; gap: 8px; overflow-x: auto; padding: 10px 10px 10px; scrollbar-width: none; }
   .strip::-webkit-scrollbar { display: none; }
   .chip { flex: none; display: flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 12px;
     padding: 8px 12px; font-size: 14px; border: 2px solid transparent; }
@@ -534,7 +536,7 @@ function renderGame() {
       <button class="tb" data-act="pause" aria-label="Pause">❚❚</button>
       <button class="tb" data-act="end">Ende</button>
     </div>
-    <button class="big" id="big" data-act="next">
+    <button class="big" id="big" aria-label="Nächster Zug">
       <div class="half flip"><div class="nm" id="nm1"></div><div class="turn">ist dran</div></div>
       <div class="divider">Tippen = nächster Zug</div>
       <div class="half"><div class="nm" id="nm2"></div><div class="turn">ist dran</div></div>
@@ -545,6 +547,18 @@ function renderGame() {
       <div class="pm">Pause<small>Tippen zum Fortsetzen</small></div>
     </div>
   </main>`;
+  // Reagiert schon beim Berühren (nicht erst beim Loslassen), auch wenn der Finger leicht verrutscht
+  const big = $('#big');
+  big.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    big.classList.add('pressed');
+    nextTurn();
+  });
+  const release = () => big.classList.remove('pressed');
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => big.addEventListener(t, release));
+  big.addEventListener('click', (e) => { if (e.detail === 0) nextTurn(); });   // Tastatur
+  big.addEventListener('contextmenu', (e) => e.preventDefault());              // kein Langdruck-Menü
   updateGame(true);
 }
 
@@ -782,7 +796,6 @@ document.addEventListener('click', (e) => {
       break;
     }
     // Game
-    case 'next': nextTurn(); break;
     case 'pause': togglePause(); break;
     case 'undo': {
       const g = S.game;
