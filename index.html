@@ -72,6 +72,14 @@
   .ibtn { width: 36px; height: 44px; border-radius: 10px; color: var(--muted); font-size: 18px; flex: none; }
   .ibtn:active { background: var(--panel2); }
   .ibtn:disabled { opacity: .25; }
+  .swatch { font-size: 18px; font-weight: 800; }
+  .psub { color: var(--muted); font-size: 13px; padding: 4px 0 0 54px; }
+  .plabel { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 12px 2px 0; }
+  .sounds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px 0 4px; }
+  .snd { height: 40px; border-radius: 10px; background: var(--panel2); font-size: 14px; font-weight: 600; }
+  .snd.used { color: var(--muted); }
+  .snd.sel { background: var(--c); color: var(--ink2, #141414); }
+  .btn.done { width: 100%; margin-top: 10px; height: 42px; background: var(--panel2); }
   .palette { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 12px 2px 4px; }
   .sw { aspect-ratio: 1; border-radius: 50%; background: var(--sc); position: relative;
     box-shadow: inset 0 0 0 2px rgba(255,255,255,.2); }
@@ -346,26 +354,72 @@ function ink(hex) {
 }
 
 /* ---------- Feedback (Ton / Vibration) ---------- */
-let audioCtx = null;
-function beep(newRound) {
-  if (!S.settings.sound) return;
+// Alle Töne werden live erzeugt (keine Audiodateien nötig, funktioniert offline)
+let audioCtx = null, master = null;
+function actx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = audioCtx.createDynamicsCompressor();
+    master = audioCtx.createGain(); master.gain.value = 0.9;
+    master.connect(comp).connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+// Einzelton: Frequenz (optional gleitend), Startzeit, Dauer, Wellenform, Lautstärke
+function tone(t, f, dur, type = 'sine', vol = 0.3, fEnd = null, attack = 0.005) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (fEnd) o.frequency.exponentialRampToValueAtTime(fEnd, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+}
+function noise(t, dur, vol = 0.3, freq = 1000) {
+  const len = Math.floor(audioCtx.sampleRate * dur), buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const s = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; g.gain.value = vol;
+  s.connect(f).connect(g).connect(master); s.start(t);
+}
+const SOUNDS = [
+  ['glocke', 'Glocke', (t) => { tone(t, 880, 1.2, 'sine', 0.3); tone(t, 880 * 2.76, 0.6, 'sine', 0.08); tone(t, 880 * 5.4, 0.3, 'sine', 0.04); }],
+  ['xylophon', 'Xylophon', (t) => [1047, 1319, 1568].forEach((f, k) => tone(t + k * 0.09, f, 0.25, 'triangle', 0.35))],
+  ['gong', 'Gong', (t) => { tone(t, 196, 1.6, 'sine', 0.35, null, 0.02); tone(t, 294, 1.3, 'sine', 0.2, null, 0.03); tone(t, 466, 1.0, 'sine', 0.12, null, 0.05); tone(t, 622, 0.7, 'sine', 0.06, null, 0.06); }],
+  ['pfiff', 'Pfiff', (t) => { tone(t, 1100, 0.18, 'sine', 0.25, 1900); tone(t + 0.22, 1900, 0.22, 'sine', 0.25, 1300); }],
+  ['trommel', 'Trommel', (t) => { [0, 0.14].forEach((d) => { tone(t + d, 260, 0.22, 'sine', 0.4, 90); noise(t + d, 0.09, 0.35, 1200); }); }],
+  ['harfe', 'Harfe', (t) => [523, 659, 784, 988, 1175].forEach((f, k) => tone(t + k * 0.06, f, 0.7, 'triangle', 0.22))],
+  ['laser', 'Laser', (t) => { tone(t, 1600, 0.28, 'square', 0.18, 250); tone(t + 0.12, 1600, 0.28, 'square', 0.14, 250); }],
+  ['tropfen', 'Tropfen', (t) => { tone(t, 500, 0.12, 'sine', 0.4, 1500); tone(t + 0.16, 700, 0.12, 'sine', 0.3, 2000); }],
+  ['fanfare', 'Fanfare', (t) => { [[392, 0, 0.12], [392, 0.14, 0.12], [523, 0.28, 0.45]].forEach(([f, d, l]) => { tone(t + d, f, l, 'sawtooth', 0.25); tone(t + d, f * 2, l, 'square', 0.08); }); }],
+  ['kuhglocke', 'Kuhglocke', (t) => { tone(t, 545, 0.35, 'square', 0.14); tone(t, 815, 0.35, 'square', 0.11); noise(t, 0.04, 0.15, 3000); }],
+  ['klingel', 'Klingel', (t) => [0, 0.16].forEach((d) => { tone(t + d, 2100, 0.35, 'sine', 0.2); tone(t + d, 2650, 0.25, 'sine', 0.1); })],
+  ['blubb', 'Blubb', (t) => { tone(t, 600, 0.16, 'sine', 0.45, 180); tone(t + 0.19, 500, 0.2, 'sine', 0.4, 150); }],
+];
+const SOUND_IDS = SOUNDS.map((s) => s[0]);
+// Spieler ohne Sound (neu oder aus älterer Version) bekommen einen freien zugeteilt
+function ensureSounds() {
+  S.players.forEach((p, i) => { if (!SOUND_IDS.includes(p.sound)) p.sound = freeSound(S.players.slice(0, i).concat(S.players.slice(i + 1))); });
+}
+function soundName(id) { const s = SOUNDS.find((x) => x[0] === id); return s ? s[1] : ''; }
+function freeSound(players) {
+  const used = players.map((p) => p.sound);
+  return SOUND_IDS.find((id) => !used.includes(id)) || SOUND_IDS[players.length % SOUND_IDS.length];
+}
+function playSound(id, newRound) {
   try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const t0 = audioCtx.currentTime;
-    (newRound ? [523, 784] : [660]).forEach((f, k) => {
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = t0 + k * 0.13;
-      o.type = 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(t); o.stop(t + 0.18);
-    });
+    actx();
+    let t = audioCtx.currentTime + 0.02;
+    if (newRound) { tone(t, 330, 0.12, 'sine', 0.2); tone(t + 0.1, 440, 0.18, 'sine', 0.2); t += 0.35; }   // Rundenauftakt
+    const s = SOUNDS.find((x) => x[0] === id) || SOUNDS[0];
+    s[2](t);
   } catch (e) {}
 }
+ensureSounds();
 function feedback(newRound) {
-  beep(newRound);
+  const g = S.game, p = g && g.players[cur().p];
+  if (S.settings.sound && p) playSound(p.sound || SOUND_IDS[cur().p % SOUND_IDS.length], newRound);
   if (S.settings.vibrate && navigator.vibrate) navigator.vibrate(newRound ? [40, 70, 40] : 40);
 }
 
@@ -482,6 +536,7 @@ function render() {
 
 function renderSetup() {
   const used = S.players.map((p) => p.color.toLowerCase());
+  const usedSounds = S.players.map((p) => p.sound);
   const n = S.players.length;
   $('#app').innerHTML = `
   <main class="setup">
@@ -497,20 +552,28 @@ function renderSetup() {
     <div class="label">Spieler · Reihenfolge = Zugreihenfolge</div>
     <ol class="plist">
       ${S.players.map((p, i) => `
-      <li class="pcard" style="--c:${p.color}">
+      <li class="pcard" style="--c:${p.color};--ink2:${ink(p.color)}">
         <div class="prow">
-          <button class="swatch" data-act="color" data-i="${i}" aria-label="Farbe wählen"></button>
+          <button class="swatch" data-act="color" data-i="${i}" aria-label="Farbe und Sound wählen" style="color:${ink(p.color)}">♪</button>
           <input class="pname" data-i="${i}" value="${esc(p.name)}" maxlength="16" placeholder="Name" autocomplete="off">
           <button class="ibtn" data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="nach oben">↑</button>
           <button class="ibtn" data-act="down" data-i="${i}" ${i === n - 1 ? 'disabled' : ''} aria-label="nach unten">↓</button>
           <button class="ibtn" data-act="del" data-i="${i}" ${n <= 2 ? 'disabled' : ''} aria-label="entfernen">✕</button>
         </div>
         ${openColor === i ? `
+        <div class="plabel">Farbe</div>
         <div class="palette">
           ${PALETTE.map(([name, c]) => `<button class="sw ${c === p.color.toLowerCase() ? 'sel' : used.includes(c) ? 'used' : ''}"
             style="--sc:${c}" data-act="pick" data-i="${i}" data-c="${c}" aria-label="${name}"></button>`).join('')}
           <label class="sw custom" aria-label="eigene Farbe"><input type="color" data-i="${i}" value="${p.color}"></label>
-        </div>` : ''}
+        </div>
+        <div class="plabel">Sound · antippen zum Anhören</div>
+        <div class="sounds">
+          ${SOUNDS.map(([id, name]) => `<button class="snd ${p.sound === id ? 'sel' : usedSounds.includes(id) ? 'used' : ''}"
+            data-act="sound" data-i="${i}" data-s="${id}">${name}</button>`).join('')}
+        </div>
+        <button class="btn done" data-act="color" data-i="${i}">Fertig</button>` : `
+        <div class="psub">♪ ${soundName(p.sound)}</div>`}
       </li>`).join('')}
     </ol>
     <div class="row">
@@ -757,14 +820,15 @@ document.addEventListener('click', (e) => {
   switch (act) {
     // Setup
     case 'color': openColor = openColor === i ? -1 : i; renderSetup(); break;
-    case 'pick': P[i].color = el.dataset.c; openColor = -1; save(); renderSetup(); break;
+    case 'pick': P[i].color = el.dataset.c; save(); renderSetup(); break;
+    case 'sound': P[i].sound = el.dataset.s; save(); renderSetup(); playSound(el.dataset.s, false); break;
     case 'up': [P[i - 1], P[i]] = [P[i], P[i - 1]]; openColor = -1; save(); renderSetup(); break;
     case 'down': [P[i + 1], P[i]] = [P[i], P[i + 1]]; openColor = -1; save(); renderSetup(); break;
     case 'del': P.splice(i, 1); openColor = -1; save(); renderSetup(); break;
     case 'add': {
       const used = P.map((p) => p.color.toLowerCase());
       const free = PALETTE.find(([, c]) => !used.includes(c));
-      P.push({ id: uid(), name: 'Spieler ' + (P.length + 1), color: free ? free[1] : PALETTE[P.length % PALETTE.length][1] });
+      P.push({ id: uid(), name: 'Spieler ' + (P.length + 1), color: free ? free[1] : PALETTE[P.length % PALETTE.length][1], sound: freeSound(P) });
       openColor = -1; save(); renderSetup();
       break;
     }
@@ -824,7 +888,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('keydown', (e) => { if (e.target.id === 'gname' && e.key === 'Enter') e.target.blur(); });
 document.addEventListener('change', (e) => {
   const t = e.target;
-  if (t.type === 'color') { S.players[+t.dataset.i].color = t.value.toLowerCase(); openColor = -1; save(); renderSetup(); }
+  if (t.type === 'color') { S.players[+t.dataset.i].color = t.value.toLowerCase(); save(); renderSetup(); }
   if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; save(); }
   if (t.id === 'importFile' && t.files[0]) importHistory(t.files[0]);
 });

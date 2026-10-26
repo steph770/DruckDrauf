@@ -1,4 +1,4 @@
-const CACHE = 'druckdrauf-v5';
+const CACHE = 'druckdrauf-v6';
 const FILES = ['./', 'index.html', 'cloud.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 
 self.addEventListener('install', (e) => {

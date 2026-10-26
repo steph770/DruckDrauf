@@ -10,7 +10,7 @@ Zugzeit-Uhr für Brettspielabende. Läuft im Browser und lässt sich am Android-
 - Riesiger Tipp-Button in Spielerfarbe: Tippen = nächster Spieler (ohne sichtbare laufende Zeit, gemessen wird im Hintergrund)
 - Name doppelt angezeigt (einmal auf dem Kopf) - für das Handy in der Tischmitte
 - Pause, kleiner Zurück-Button mit Sicherheitsabfrage, Rundenzähler
-- Ton und Vibration beim Zugwechsel (Doppelton bei neuer Runde)
+- Eigener Sound pro Spieler (12 Töne zur Auswahl, mit Vorhören), Auftakt bei neuer Runde, Vibration
 - Statistik am Ende: Gesamtzeit, Züge, Durchschnitt, längster Zug, Titel
 - Partien-Log mit Langzeit-Statistik nach Spieler, Spiel und Verlauf, Backup als Datei
 - Gemeinsame History über mehrere Geräte (Firebase Firestore), Beitritt per Einladungslink, einzelne Partien für alle löschbar
